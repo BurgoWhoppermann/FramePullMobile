@@ -4,7 +4,7 @@ import AVFoundation
 struct AutoPlacementConfig {
     var numberOfStills: Int = 10
     var numberOfClips: Int = 5
-    var targetClipDuration: Double = 3.0
+    var maxCutsPerClip: Int = 2
 }
 
 struct AutoPlacementDialogView: View {
@@ -19,10 +19,7 @@ struct AutoPlacementDialogView: View {
                     Stepper("Number of Stills: \(config.numberOfStills)", value: $config.numberOfStills, in: 0...50)
                     Stepper("Number of Clips: \(config.numberOfClips)", value: $config.numberOfClips, in: 0...20)
                     
-                    VStack(alignment: .leading) {
-                        Text("Target Clip Duration: \(String(format: "%.1f", config.targetClipDuration)) sec")
-                        Slider(value: $config.targetClipDuration, in: 1.0...10.0, step: 0.5)
-                    }
+                    Stepper("Clips contain up to \(config.maxCutsPerClip) cuts", value: $config.maxCutsPerClip, in: 1...10)
                 }
                 
                 Section(footer: Text("Auto-placement will evenly distribute markers across the video. Clips will attempt to snap to detected scene cuts where possible.")) {
@@ -58,31 +55,44 @@ struct AutoPlacementDialogView: View {
             }
         }
         
-        // 2. Generate Clips (attempting to use scene cuts)
+        // 2. Generate Clips (incorporating scene cuts and avoiding overlap)
         var newClips: [MarkedClip] = []
         if config.numberOfClips > 0 {
-            // Very simple approach first: Even distribution
-            // Then adjust to closest scene cut if it's within a window
+            let cuts = playerModel.sceneCuts.sorted()
+            let clipInterval = duration / Double(config.numberOfClips)
+            var lastOutPoint: Double = 0.0
             
-            let clipInterval = duration / Double(config.numberOfClips + 1)
-            let cuts = playerModel.sceneCuts
-            
-            for i in 1...config.numberOfClips {
-                let targetCenter = clipInterval * Double(i)
-                var bestStart = targetCenter - (config.targetClipDuration / 2.0)
+            for i in 0..<config.numberOfClips {
+                let targetStart = clipInterval * Double(i)
                 
-                // See if there's a scene cut nearby (e.g. within 5 seconds) to snap the start point to
-                if let closestCut = cuts.min(by: { abs($0 - bestStart) < abs($1 - bestStart) }) {
-                    if abs(closestCut - bestStart) < 5.0 {
-                        bestStart = closestCut
-                    }
+                // Find nearest cut that is >= lastOutPoint
+                var bestStart: Double = max(targetStart, lastOutPoint)
+                let validCuts = cuts.filter { $0 >= lastOutPoint }
+                
+                if let closest = validCuts.min(by: { abs($0 - targetStart) < abs($1 - targetStart) }), closest >= lastOutPoint {
+                    bestStart = closest
                 }
                 
-                // Ensure boundaries
-                bestStart = max(0, min(bestStart, duration - config.targetClipDuration))
-                let end = bestStart + config.targetClipDuration
+                // Find the out point: `maxCutsPerClip` cuts ahead
+                let subsequentCuts = cuts.filter { $0 > bestStart }
                 
-                newClips.append(MarkedClip(inPoint: bestStart, outPoint: end, isManual: false))
+                var bestEnd: Double
+                if subsequentCuts.count >= config.maxCutsPerClip {
+                    bestEnd = subsequentCuts[config.maxCutsPerClip - 1]
+                } else if let last = subsequentCuts.last {
+                    bestEnd = last
+                } else {
+                    bestEnd = duration
+                }
+                
+                // Set a reasonable fallback duration if no cuts exist to bound it
+                if bestEnd - bestStart < 0.5 {
+                    bestEnd = min(bestStart + 2.0, duration)
+                }
+                
+                // Ensure no overlap: the loop will update lastOutPoint to bestEnd
+                newClips.append(MarkedClip(inPoint: bestStart, outPoint: bestEnd, isManual: false))
+                lastOutPoint = bestEnd
             }
         }
         

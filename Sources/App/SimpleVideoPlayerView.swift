@@ -35,7 +35,19 @@ struct ErgonomicVideoPlayerView: View {
                                 .shadow(radius: 4)
                         }
                         .padding(.leading, 20)
-                        // .offset removed to let safe area handle it
+                        
+                        // Bug Report Button
+                        Button(action: {
+                            playerModel.captureAndReport()
+                        }) {
+                            Image(systemName: "ladybug.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(10)
+                                .background(Circle().fill(Color.orange.opacity(0.8)))
+                                .shadow(radius: 4)
+                        }
+                        .padding(.leading, 8)
                         
                         Spacer()
                         
@@ -209,6 +221,15 @@ struct ErgonomicVideoPlayerView: View {
             AutoPlacementDialogView(playerModel: playerModel)
                 .presentationDetents([.medium])
         }
+        .sheet(isPresented: $playerModel.showBugReport) {
+            if let screenshot = playerModel.bugScreenshot {
+                BugReportMailView(
+                    screenshot: screenshot,
+                    bodyText: "Please describe the bug you encountered:\n\n\n\nTimecode: \(formatTime(playerModel.currentTime))"
+                )
+                .ignoresSafeArea()
+            }
+        }
     }
     
     private func snapFrame() {
@@ -296,6 +317,8 @@ class PlayerModel: ObservableObject {
     @Published var showExportOptions = false
     @Published var showReviewMode = false
     @Published var showAutoPlacementMode = false
+    @Published var showBugReport = false
+    @Published var bugScreenshot: UIImage?
     @Published var feedbackMessage = ""
     
     // Marking state
@@ -338,6 +361,30 @@ class PlayerModel: ObservableObject {
         
         // Automatically start scene detection in the background
         startSceneDetection(url: url)
+    }
+    
+    // MARK: - Bug Reporting
+    
+    func captureAndReport() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        
+        guard let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow }) else { return }
+        
+        UIGraphicsBeginImageContextWithOptions(window.bounds.size, false, 0.0)
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
+        let image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        if let screenshot = image {
+            self.bugScreenshot = screenshot
+            self.showBugReport = true
+        } else {
+            self.feedbackMessage = "Failed to capture screenshot."
+            self.showFeedback = true
+        }
     }
     
     private func startSceneDetection(url: URL) {
