@@ -1,0 +1,24 @@
+name: FramePullMobile
+options:
+  bundleIdPrefix: de.carlooppermann
+  deploymentTarget:
+    iOS: 16.0
+targets:
+  FramePullMobile:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    info:
+      path: Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSPhotoLibraryUsageDescription: "FramePull needs access to your Photo Library to save extracted frames."
+        NSPhotoLibraryAddUsageDescription: "FramePull needs access to your Photo Library to save extracted frames."
+        CFBundleDisplayName: FramePull
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        DEVELOPMENT_TEAM: V7R6ZR7F9Q
+        TARGETED_DEVICE_FAMILY: "1,2"
+        PRODUCT_NAME: FramePull
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
