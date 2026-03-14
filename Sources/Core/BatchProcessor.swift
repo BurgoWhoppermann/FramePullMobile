@@ -11,7 +11,7 @@ class BatchProcessor: ObservableObject {
     
     private let coreProcessor = VideoProcessor()
     
-    func exportItems(stills: [MarkedStill], clips: [MarkedClip], from url: URL) async throws {
+    func exportItems(stills: [MarkedStill], clips: [MarkedClip], from url: URL, toAlbum albumName: String = "FramePull") async throws {
         self.isProcessing = true
         self.progress = 0
         self.statusMessage = "Starting Export..."
@@ -26,8 +26,8 @@ class BatchProcessor: ObservableObject {
             throw NSError(domain: "FramePull", code: 2, userInfo: [NSLocalizedDescriptionKey: "Photo library access denied. We need write access to save to an album."])
         }
         
-        // 2. Get or create "FramePull" Album
-        let album = try await getOrCreateFramePullAlbum()
+        // 2. Get or create Album
+        let album = try await getOrCreateAlbum(named: albumName)
         
         let hasStills = !stills.isEmpty
         let hasClips = !clips.isEmpty
@@ -49,9 +49,9 @@ class BatchProcessor: ObservableObject {
     
     // MARK: - Album Management
     
-    private func getOrCreateFramePullAlbum() async throws -> PHAssetCollection {
+    private func getOrCreateAlbum(named albumName: String) async throws -> PHAssetCollection {
         let fetchOptions = PHFetchOptions()
-        fetchOptions.predicate = NSPredicate(format: "title = %@", "FramePull")
+        fetchOptions.predicate = NSPredicate(format: "title = %@", albumName)
         let collection = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
         
         if let album = collection.firstObject {
@@ -60,13 +60,13 @@ class BatchProcessor: ObservableObject {
         
         var placeholderID: String?
         try await PHPhotoLibrary.shared().performChanges {
-            let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: "FramePull")
+            let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumName)
             placeholderID = request.placeholderForCreatedAssetCollection.localIdentifier
         }
         
         guard let identifier = placeholderID,
               let createdAlbum = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [identifier], options: nil).firstObject else {
-            throw NSError(domain: "FramePull", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to create FramePull album."])
+            throw NSError(domain: "FramePull", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to create album: \(albumName)"])
         }
         
         return createdAlbum

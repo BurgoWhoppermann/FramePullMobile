@@ -28,6 +28,7 @@ struct ReviewSelectionView: View {
     
     @State private var isAnimating: Bool = false
     @State private var hasStartedExport: Bool = false
+    @State private var customAlbumName: String = ""
     
     @StateObject private var batchProcessor = BatchProcessor()
     
@@ -93,15 +94,11 @@ struct ReviewSelectionView: View {
             } else if approvedItems.isEmpty {
                 // Done reviewing, but kept nothing
                 doneEmptyView
+            } else if !hasStartedExport {
+                exportDestinationView
             } else {
                 // Done reviewing, export in progress (batchProcessor handles the overlay)
                 Color.black.ignoresSafeArea()
-                    .onAppear {
-                        if !hasStartedExport {
-                            hasStartedExport = true
-                            startExport()
-                        }
-                    }
             }
         }
         .onAppear {
@@ -275,6 +272,68 @@ struct ReviewSelectionView: View {
         .padding(.bottom, 40)
     }
     
+    // MARK: - Export Destination View
+    
+    private var exportDestinationView: some View {
+        VStack(spacing: 32) {
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: 60))
+                .foregroundColor(.white)
+            
+            Text("Where to save?")
+                .font(.title.bold())
+                .foregroundColor(.white)
+            
+            VStack(spacing: 16) {
+                Button(action: {
+                    hasStartedExport = true
+                    startExport(albumName: "FramePull")
+                }) {
+                    Text("Save to Default 'FramePull' Album")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                }
+                
+                Text("- OR -")
+                    .foregroundColor(.white.opacity(0.5))
+                    .font(.subheadline)
+                
+                VStack(spacing: 8) {
+                    Text("Save to Custom Album")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    TextField("Album Name", text: $customAlbumName)
+                        .textFieldStyle(.roundedBorder)
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 8)
+                    
+                    Button(action: {
+                        let finalName = customAlbumName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        hasStartedExport = true
+                        startExport(albumName: finalName.isEmpty ? "FramePull" : finalName)
+                    }) {
+                        Text("Create & Save")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white)
+                            .foregroundColor(.black)
+                            .cornerRadius(12)
+                    }
+                }
+                .padding()
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(16)
+            }
+            .padding(.horizontal, 32)
+        }
+    }
+    
     // MARK: - Done Empty View
     
     private var doneEmptyView: some View {
@@ -307,6 +366,9 @@ struct ReviewSelectionView: View {
         queue.append(contentsOf: playerModel.clips.map { .init(type: .clip($0)) })
         items = queue
         currentIndex = 0
+        
+        let filename = playerModel.url.deletingPathExtension().lastPathComponent
+        customAlbumName = "FramePull_\(filename)"
     }
     
     private func approveAndAdvance() {
@@ -342,7 +404,7 @@ struct ReviewSelectionView: View {
         }
     }
     
-    private func startExport() {
+    private func startExport(albumName: String) {
         let stills = approvedItems.compactMap { item -> MarkedStill? in
             if case .still(let s) = item.type { return s }
             return nil
@@ -354,7 +416,7 @@ struct ReviewSelectionView: View {
         
         Task {
             do {
-                try await batchProcessor.exportItems(stills: stills, clips: clips, from: playerModel.url)
+                try await batchProcessor.exportItems(stills: stills, clips: clips, from: playerModel.url, toAlbum: albumName)
                 await MainActor.run {
                     playerModel.stills.removeAll()
                     playerModel.clips.removeAll()
