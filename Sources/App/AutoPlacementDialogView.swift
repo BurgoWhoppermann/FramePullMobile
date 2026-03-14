@@ -90,8 +90,11 @@ struct AutoPlacementDialogView: View {
                     bestEnd = min(bestStart + 2.0, duration)
                 }
                 
+                // Offset the out point by ~1 frame (0.04s) to prevent catching the next scene's first frame
+                let adjustedEnd = max(bestStart + 0.1, bestEnd - 0.04)
+                
                 // Ensure no overlap: the loop will update lastOutPoint to bestEnd
-                newClips.append(MarkedClip(inPoint: bestStart, outPoint: bestEnd, isManual: false))
+                newClips.append(MarkedClip(inPoint: bestStart, outPoint: adjustedEnd, isManual: false))
                 lastOutPoint = bestEnd
             }
         }
